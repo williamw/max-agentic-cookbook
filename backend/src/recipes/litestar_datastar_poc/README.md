@@ -1,16 +1,19 @@
 # Litestar + Datastar POC
 
-> A proof-of-concept demonstrating a simpler, more streamlined stack for AI-powered web applications
+> **Zero JavaScript.** Zero build step. Full reactivity.
+
+A proof-of-concept demonstrating a simpler, more streamlined stack for AI-powered web applications.
 
 ## What This Demonstrates
 
 This POC shows how **Litestar** (Python backend) + **Datastar** (hypermedia frontend) can significantly simplify your DevRel examples by:
 
-1. **Reducing boilerplate**: Less Pydantic model ceremony
-2. **Simpler routing**: More intuitive than FastAPI's router system
-3. **No React complexity**: Reactive UI without build tools, bundlers, or frameworks
-4. **Hypermedia-driven**: Server renders HTML, client stays lean
-5. **Built-in features**: Better dependency injection, lifecycle hooks
+1. **Zero custom JavaScript**: All reactivity via declarative HTML attributes
+2. **Reducing boilerplate**: Less Pydantic model ceremony
+3. **Simpler routing**: More intuitive than FastAPI's router system
+4. **No React complexity**: Reactive UI without build tools, bundlers, or frameworks
+5. **Hypermedia-driven**: Server sends signals, Datastar updates DOM
+6. **Built-in features**: Better dependency injection, lifecycle hooks
 
 ## Stack Comparison
 
@@ -42,10 +45,11 @@ Backend:
 - Built-in SSE support
 
 Frontend:
-- Single HTML file
+- Single HTML file (229 lines)
 - Datastar from CDN (no build step)
-- Declarative reactivity
-- Server-rendered HTML fragments
+- Zero custom JavaScript (0 lines)
+- Declarative reactivity via data-* attributes
+- Server sends SSE signals to update state
 ```
 
 ## Key Benefits
