@@ -4,6 +4,7 @@ Litestar + Datastar POC
 This demonstrates how Litestar and Datastar can simplify the stack:
 - Litestar: More intuitive routing, built-in DI, less boilerplate
 - Datastar: Hypermedia-driven reactivity without React/Vue/etc.
+- Zero custom JavaScript: Everything is declarative
 """
 
 import asyncio
@@ -13,15 +14,14 @@ from pathlib import Path
 from typing import AsyncGenerator
 
 from litestar import Litestar, get, post
-from litestar.response import Stream, Template
+from litestar.response import Stream
 from litestar.contrib.jinja import JinjaTemplateEngine
 from litestar.template.config import TemplateConfig
 from litestar.datastructures import State
+from litestar.status_codes import HTTP_200_OK
 from openai import AsyncOpenAI
 
 
-# Simple data classes - no need for complex Pydantic models
-# Litestar handles validation via type hints
 async def get_openai_client(state: State) -> AsyncOpenAI:
     """Get OpenAI client from app state (dependency injection)"""
     endpoints = json.loads(os.getenv("COOKBOOK_ENDPOINTS", "[]"))
@@ -34,29 +34,35 @@ async def get_openai_client(state: State) -> AsyncOpenAI:
 
 
 @get("/")
-async def index() -> Template:
+async def index() -> dict:
     """Serve the main page with Datastar"""
-    return Template(name="index.html")
+    template_path = Path(__file__).parent / "templates" / "index.html"
+    return {"content": template_path.read_text()}
 
 
 @post("/chat")
 async def chat(data: dict, state: State) -> Stream:
     """
-    Handle chat messages and stream responses via SSE
+    Handle chat messages and stream responses via Datastar SSE signals
 
     Litestar automatically:
     - Parses JSON body to dict
     - Validates required fields
     - Handles errors gracefully
 
-    No need for separate Pydantic request/response models!
+    Datastar expects SSE events in this format:
+    event: datastar-merge-signals
+    data: {"response": "text here"}
     """
     message = data.get("message", "")
     if not message:
-        return Stream(iter([]))
+        # Send empty response signal
+        async def empty():
+            yield f'event: datastar-merge-signals\ndata: {{"response": "", "loading": false}}\n\n'
+        return Stream(empty(), media_type="text/event-stream")
 
-    async def generate_sse() -> AsyncGenerator[str, None]:
-        """Generate SSE events for Datastar"""
+    async def generate_datastar_signals() -> AsyncGenerator[str, None]:
+        """Generate Datastar-compatible SSE signals"""
         client = await get_openai_client(state)
 
         try:
@@ -75,35 +81,58 @@ async def chat(data: dict, state: State) -> Stream:
                     content = chunk.choices[0].delta.content
                     full_response += content
 
-                    # Datastar SSE format: send HTML fragments
-                    fragment = f'<div id="response" class="response">{full_response}</div>'
-                    yield f"data: {json.dumps({'fragment': fragment})}\n\n"
+                    # Send Datastar signal to update the store
+                    signal_data = {
+                        "response": full_response,
+                        "loading": True
+                    }
+                    yield f"event: datastar-merge-signals\n"
+                    yield f"data: {json.dumps(signal_data)}\n\n"
 
                     await asyncio.sleep(0.01)  # Smooth streaming
 
-            # Send final state
-            yield f"data: {json.dumps({'done': True})}\n\n"
+            # Send final signal with loading=false
+            final_signal = {
+                "response": full_response,
+                "loading": False,
+                "message": ""  # Clear the input
+            }
+            yield f"event: datastar-merge-signals\n"
+            yield f"data: {json.dumps(final_signal)}\n\n"
 
         except Exception as e:
-            error_fragment = f'<div id="response" class="error">Error: {str(e)}</div>'
-            yield f"data: {json.dumps({'fragment': error_fragment})}\n\n"
+            error_signal = {
+                "response": f"Error: {str(e)}",
+                "loading": False
+            }
+            yield f"event: datastar-merge-signals\n"
+            yield f"data: {json.dumps(error_signal)}\n\n"
 
-    return Stream(generate_sse(), media_type="text/event-stream")
+    return Stream(
+        generate_datastar_signals(),
+        media_type="text/event-stream",
+        status_code=HTTP_200_OK,
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 
 @get("/health")
 async def health() -> dict:
     """Health check endpoint"""
-    return {"status": "ok", "framework": "litestar", "frontend": "datastar"}
+    return {
+        "status": "ok",
+        "framework": "litestar",
+        "frontend": "datastar",
+        "javascript_lines": 0
+    }
 
 
 # Litestar app - much simpler configuration than FastAPI!
 app = Litestar(
     route_handlers=[index, chat, health],
-    template_config=TemplateConfig(
-        directory=Path(__file__).parent / "templates",
-        engine=JinjaTemplateEngine,
-    ),
     debug=True,
 )
 
