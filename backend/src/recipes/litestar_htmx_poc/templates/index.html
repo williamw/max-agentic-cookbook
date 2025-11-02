@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Litestar + HTMX POC</title>
+
+    <!-- HTMX: Modern approach to hypermedia -->
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js"></script>
+
+    <!-- Hyperscript: Tiny, readable scripting -->
+    <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 800px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #f5576c;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .tech-stack {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+
+        .tech-badge {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 600;
+        }
+
+        .minimal-js-badge {
+            background: #ffa726;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75em;
+            margin-left: 10px;
+        }
+
+        .chat-form {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        .chat-input:focus {
+            outline: none;
+            border-color: #f5576c;
+        }
+
+        .chat-button {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, opacity 0.3s;
+        }
+
+        .chat-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+        }
+
+        .chat-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .response-container {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            min-height: 200px;
+        }
+
+        .response {
+            color: #333;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
+        .error {
+            color: #dc3545;
+            padding: 15px;
+            border-left: 4px solid #dc3545;
+        }
+
+        .placeholder {
+            color: #999;
+            font-style: italic;
+        }
+
+        .benefits {
+            margin-top: 30px;
+            padding: 20px;
+            background: #fff0f5;
+            border-radius: 8px;
+        }
+
+        .benefits h3 {
+            color: #f5576c;
+            margin-bottom: 15px;
+        }
+
+        .benefits ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .benefits li {
+            padding: 8px 0;
+            padding-left: 25px;
+            position: relative;
+            color: #555;
+        }
+
+        .benefits li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #f5576c;
+            font-weight: bold;
+        }
+
+        /* HTMX loading states */
+        .htmx-request .chat-button {
+            opacity: 0.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>
+                Litestar + HTMX
+                <span class="minimal-js-badge">Minimal JS</span>
+            </h1>
+            <p>The classic hypermedia approach</p>
+
+            <div class="tech-stack">
+                <span class="tech-badge">🚀 Litestar</span>
+                <span class="tech-badge">🔄 HTMX</span>
+                <span class="tech-badge">✨ Hyperscript</span>
+                <span class="tech-badge">🤖 Claude/Llama</span>
+            </div>
+        </div>
+
+        <!-- HTMX-powered chat interface -->
+        <form class="chat-form" hx-ext="sse">
+            <input
+                type="text"
+                name="message"
+                class="chat-input"
+                placeholder="Ask me anything..."
+                required
+                id="message-input"
+            />
+            <button
+                type="submit"
+                class="chat-button"
+                hx-post="/chat"
+                hx-ext="sse"
+                sse-connect="/chat"
+                sse-swap="message"
+                hx-target="#response-area"
+                hx-swap="innerHTML"
+                _="on htmx:afterRequest
+                   set #message-input.value to ''
+                   set #message-input.disabled to false
+                   focus() the #message-input
+                   on htmx:beforeRequest
+                   set #message-input.disabled to true"
+            >
+                Send
+            </button>
+        </form>
+
+        <div class="response-container">
+            <div id="response-area">
+                <div class="placeholder">Type a message to start...</div>
+            </div>
+        </div>
+
+        <div class="benefits">
+            <h3>Why HTMX + Hyperscript?</h3>
+            <ul>
+                <li><strong>HTMX</strong>: More mature than Datastar, widely adopted, great docs</li>
+                <li><strong>Hyperscript</strong>: Readable scripting for small client-side behaviors</li>
+                <li><strong>HTML-first</strong>: Server sends HTML fragments, not JSON</li>
+                <li><strong>SSE Built-in</strong>: Native streaming support with hx-ext="sse"</li>
+                <li><strong>Progressive Enhancement</strong>: Works without JS (degrades gracefully)</li>
+                <li><strong>Battle-tested</strong>: Used in production by many companies</li>
+            </ul>
+        </div>
+    </div>
+
+    <!--
+        Hyperscript examples in this POC:
+
+        _="on htmx:afterRequest set #message-input.value to ''"
+           ^ After HTMX request completes, clear the input
+
+        This is way more readable than vanilla JS:
+        document.addEventListener('htmx:afterRequest', e => {
+            document.getElementById('message-input').value = '';
+        });
+
+        That's the power of hyperscript: natural language syntax!
+    -->
+</body>
+</html>
